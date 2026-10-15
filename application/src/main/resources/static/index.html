@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TicketFlow</title>
+    <style>
+        :root { color-scheme: light; font-family: system-ui, sans-serif; color: #17202a; background: #eef2f5; }
+        body { margin: 0; } header { background: #123047; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; }
+        main { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; } section { background: white; padding: 1.25rem; margin-bottom: 1rem; border: 1px solid #d8e0e6; border-radius: 6px; }
+        form { display: grid; gap: .75rem; max-width: 680px; } label { display: grid; gap: .3rem; font-weight: 600; } input, textarea, select, button { font: inherit; padding: .6rem; border: 1px solid #aab7c2; border-radius: 4px; } textarea { min-height: 90px; }
+        button { cursor: pointer; background: #087f8c; color: white; border: 0; font-weight: 700; } button.secondary { background: #526574; } button.danger { background: #ad3b3b; }
+        .toolbar, .actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: end; } .hidden { display: none; } .error { color: #ad2020; min-height: 1.2rem; } .success { color: #176b3a; min-height: 1.2rem; }
+        table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: .65rem; border-bottom: 1px solid #d8e0e6; } tr[data-test-id="ticket-row"] { cursor: pointer; }
+    </style>
+</head>
+<body>
+<header><strong>TicketFlow</strong><button class="secondary hidden" data-test-id="logout">Log out</button></header>
+<main>
+    <section data-test-id="login-view">
+        <h1>Sign in</h1><form data-test-id="login-form">
+            <label>Username<input data-test-id="username" required autocomplete="username"></label>
+            <label>Password<input data-test-id="password" type="password" required autocomplete="current-password"></label>
+            <button data-test-id="login-submit">Sign in</button><div class="error" data-test-id="login-error"></div>
+        </form>
+    </section>
+    <section class="hidden" data-test-id="ticket-list-view">
+        <div class="toolbar"><label>Search tickets<input data-test-id="search-input" placeholder="Incident or description"></label><button data-test-id="search-submit">Search</button><button data-test-id="create-ticket">Create ticket</button></div>
+        <div class="error" data-test-id="list-error"></div><table><thead><tr><th>Incident</th><th>Short description</th><th>Priority</th><th>Status</th><th>Assigned group</th></tr></thead><tbody data-test-id="ticket-rows"></tbody></table>
+    </section>
+    <section class="hidden" data-test-id="ticket-form-view"><h2 data-test-id="form-title">Create ticket</h2><form data-test-id="ticket-form">
+        <label>Short description<input data-test-id="short-description" required></label><label>Description<textarea data-test-id="description" required></textarea></label><label>Category<input data-test-id="category" required></label>
+        <label>Priority<select data-test-id="priority"><option>P1_CRITICAL</option><option>P2_HIGH</option><option selected>P3_MEDIUM</option><option>P4_LOW</option></select></label>
+        <div class="actions"><button data-test-id="save-ticket">Save ticket</button><button type="button" class="secondary" data-test-id="cancel-ticket">Cancel</button></div><div class="error" data-test-id="form-error"></div>
+    </form></section>
+    <section class="hidden" data-test-id="ticket-details-view"><h2 data-test-id="incident-number"></h2><div class="error" data-test-id="details-error"></div>
+        <form data-test-id="details-form"><label>Short description<input data-test-id="details-short-description"></label><label>Description><textarea data-test-id="details-description"></textarea></label><label>Category<input data-test-id="details-category"></label><label>Priority<select data-test-id="details-priority"><option>P1_CRITICAL</option><option>P2_HIGH</option><option>P3_MEDIUM</option><option>P4_LOW</option></select></label><label>Status<select data-test-id="details-status"><option>NEW</option><option>IN_PROGRESS</option><option>ON_HOLD</option><option>RESOLVED</option><option>CLOSED</option></select></label>
+            <div class="actions"><button data-test-id="update-ticket">Update</button><button type="button" data-test-id="assign-ticket">Assign</button><button type="button" data-test-id="resolve-ticket">Resolve</button><button type="button" class="danger" data-test-id="close-ticket">Close</button><button type="button" class="secondary" data-test-id="back-to-list">Back</button></div>
+        </form><div class="success" data-test-id="details-message"></div>
+    </section>
+</main>
+<script>
+const state = { token: sessionStorage.getItem('ticketflow-session'), current: null };
+const $ = id => document.querySelector(`[data-test-id="${id}"]`);
+const show = id => document.querySelectorAll('main section').forEach(s => s.classList.toggle('hidden', s.dataset.testId !== id));
+async function request(url, options = {}) { const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } }); if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `Request failed: ${response.status}`); return response.status === 204 ? null : response.json(); }
+function message(id, text) { $(id).textContent = text; }
+function renderRows(tickets) { $('ticket-rows').innerHTML = tickets.map(t => `<tr data-test-id="ticket-row" data-number="${t.incidentNumber}"><td>${t.incidentNumber}</td><td>${t.shortDescription}</td><td>${t.priority}</td><td>${t.status}</td><td>${t.assignedGroup || ''}</td></tr>`).join(''); document.querySelectorAll('[data-test-id="ticket-row"]').forEach(row => row.onclick = () => loadDetails(row.dataset.number)); }
+async function loadList(query = '') { try { renderRows(await request(`/api/tickets${query ? `?query=${encodeURIComponent(query)}` : ''}`)); message('list-error', ''); } catch (e) { message('list-error', e.message); } }
+async function loadDetails(number) { try { const t = await request(`/api/tickets/${number}`); state.current = t; $('incident-number').textContent = t.incidentNumber; ['shortDescription','description','category','priority','status'].forEach(key => { const field = ({ shortDescription: 'details-short-description', description: 'details-description', category: 'details-category', priority: 'details-priority', status: 'details-status' })[key]; $(field).value = t[key]; }); show('ticket-details-view'); } catch (e) { message('details-error', e.message); } }
+$('login-form').onsubmit = e => { e.preventDefault(); if (!$('username').value.trim() || !$('password').value) return message('login-error', 'Username and password are required.'); state.token = 'authenticated'; sessionStorage.setItem('ticketflow-session', state.token); $('logout').classList.remove('hidden'); show('ticket-list-view'); loadList(); };
+$('logout').onclick = () => { sessionStorage.clear(); location.reload(); };
+$('search-submit').onclick = () => loadList($('search-input').value.trim()); $('create-ticket').onclick = () => { $('ticket-form').reset(); show('ticket-form-view'); }; $('cancel-ticket').onclick = () => show('ticket-list-view');
+$('ticket-form').onsubmit = async e => { e.preventDefault(); try { const ticket = await request('/api/tickets', { method: 'POST', body: JSON.stringify({ shortDescription: $('short-description').value, description: $('description').value, category: $('category').value, priority: $('priority').value }) }); show('ticket-list-view'); await loadList(); await loadDetails(ticket.incidentNumber); } catch (err) { message('form-error', err.message); } };
+$('update-ticket').onclick = async e => { e.preventDefault(); try { await request(`/api/tickets/${state.current.incidentNumber}`, { method: 'PATCH', body: JSON.stringify({ shortDescription: $('details-short-description').value, description: $('details-description').value, category: $('details-category').value, priority: $('details-priority').value, status: $('details-status').value }) }); message('details-message', 'Ticket updated.'); await loadDetails(state.current.incidentNumber); } catch (err) { message('details-error', err.message); } };
+$('assign-ticket').onclick = async () => { try { await request(`/api/tickets/${state.current.incidentNumber}/assign`, { method: 'POST', body: JSON.stringify({ assignedUser: 'automation-user', assignedGroup: 'service-desk' }) }); await loadDetails(state.current.incidentNumber); } catch (err) { message('details-error', err.message); } };
+$('resolve-ticket').onclick = async () => { try { await request(`/api/tickets/${state.current.incidentNumber}/resolve`, { method: 'POST', body: JSON.stringify({ resolutionNotes: 'Resolved through TicketFlow UI' }) }); await loadDetails(state.current.incidentNumber); } catch (err) { message('details-error', err.message); } };
+$('close-ticket').onclick = async () => { try { await request(`/api/tickets/${state.current.incidentNumber}/close`, { method: 'POST' }); await loadDetails(state.current.incidentNumber); } catch (err) { message('details-error', err.message); } };
+$('back-to-list').onclick = () => { show('ticket-list-view'); loadList(); };
+if (state.token) { $('logout').classList.remove('hidden'); show('ticket-list-view'); loadList(); }
+</script>
+</body></html>

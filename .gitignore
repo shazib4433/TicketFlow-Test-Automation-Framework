@@ -1,0 +1,22 @@
+# Build
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Secrets
+.env
+*.env
+!.env.example
+
+# Test output
+test-output/
+screenshots/
+logs/
+*.log
